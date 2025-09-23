@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>族語／中文 批次置換工具（JSON 模板 ↔ CSV）</title>
+  <title>JSON ↔ CSV 更新工具（只限 speech / reading）</title>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:24px;line-height:1.6}
     .card{border:1px solid #e5e7eb;border-radius:14px;padding:18px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
@@ -19,15 +19,12 @@
     .changed{background:#fff7ed}
     pre{white-space:pre-wrap;word-break:break-word;border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fafafa;max-height:320px;overflow:auto}
   </style>
-  <!-- 只用 CSV：Papa Parse（支援引號、逗號、UTF-8/BOM） -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
 <body>
-  <h1>族語／中文 批次置換工具 <span class="small muted">(JSON 模板 ↔ CSV 更新，僅 ab/ch)</span></h1>
-  <p class="small muted">
-    步驟：上傳 <b>模板 JSON</b> 與 <b>CSV</b>（欄位：<code>json_path</code>、<code>ab</code>、<code>ch</code>）→ 預覽變更 → 套用更新 → 下載新 JSON。<br/>
-    規則：<b>只更新 ab/ch</b>；若該欄位在 CSV 為空白就<b>略過</b>；僅在<b>CSV 值與模板不同</b>時才會更新。
-  </p>
+  <h1>JSON ↔ CSV 更新工具 <span class="small muted">(僅更新 speech / reading 區塊)</span></h1>
+  <p class="small muted">CSV 欄位必須包含 <code>json_path</code>、<code>ab</code>、<code>ch</code>。<br/>
+  工具只會處理 JSON 中屬於 <b>speech</b> 或 <b>reading</b> 的路徑，其餘區塊保持原樣。</p>
 
   <div class="card">
     <h3>1) 上傳檔案</h3>
@@ -46,21 +43,13 @@
   </div>
 
   <div class="card">
-    <h3>2) 檢查預計變更</h3>
-    <div class="row">
-      <button id="previewBtn">預覽變更</button>
-      <span id="previewMsg" class="small muted"></span>
-    </div>
+    <h3>2) 預覽變更</h3>
+    <button id="previewBtn">預覽變更</button>
+    <span id="previewMsg" class="small muted"></span>
     <div style="max-height:320px;overflow:auto;margin-top:10px">
       <table id="diffTable">
         <thead>
-          <tr>
-            <th>json_path</th>
-            <th>欄位</th>
-            <th>原值</th>
-            <th>新值</th>
-            <th>狀態</th>
-          </tr>
+          <tr><th>json_path</th><th>欄位</th><th>原值</th><th>新值</th><th>狀態</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -68,175 +57,87 @@
   </div>
 
   <div class="card">
-    <h3>3) 套用更新並下載</h3>
-    <div class="row">
-      <button id="applyBtn">套用更新</button>
-      <button id="downloadBtn" class="secondary">下載更新後 JSON</button>
-    </div>
+    <h3>3) 套用更新 & 下載</h3>
+    <button id="applyBtn">套用更新</button>
+    <button id="downloadBtn" class="secondary">下載更新後 JSON</button>
     <p id="applyMsg" class="small muted"></p>
     <h4>結果預覽</h4>
     <pre id="resultPreview"></pre>
   </div>
 
 <script>
-let templateJSON = null;
-let csvRows = [];
-let updatedJSON = null;
-let plannedChanges = []; // {path, field, oldVal, newVal, status}
+let templateJSON=null,csvRows=[],updatedJSON=null,plannedChanges=[];
 
-function setStatus(id, msg, cls="muted"){
-  const el = document.getElementById(id);
-  el.className = "small " + cls;
-  el.textContent = msg;
-}
+function setStatus(id,msg,cls="muted"){const el=document.getElementById(id);el.className="small "+cls;el.textContent=msg;}
 
-// 讀模板 JSON
-document.getElementById("jsonFile").addEventListener("change", (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev)=>{
-    try{
-      templateJSON = JSON.parse(ev.target.result);
-      setStatus("jsonStatus", "已載入 JSON 模板。", "");
-    }catch(err){
-      setStatus("jsonStatus", "JSON 解析錯誤：" + err.message, "err");
-      templateJSON = null;
-    }
-  };
-  reader.readAsText(file, "utf-8");
+document.getElementById("jsonFile").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=ev=>{try{templateJSON=JSON.parse(ev.target.result);setStatus("jsonStatus","已載入 JSON 模板。","");}
+    catch(err){setStatus("jsonStatus","JSON 解析錯誤："+err.message,"err");templateJSON=null;}};
+  r.readAsText(f,"utf-8");
 });
 
-// 讀 CSV（只允許 CSV）
-document.getElementById("csvFile").addEventListener("change", (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  Papa.parse(file, {
-    header: true,
-    skipEmptyLines: "greedy",
-    encoding: "utf-8",
-    complete: (results)=>{
-      // 標準化：只取需要的欄位並做 trim
-      csvRows = results.data.map(r => ({
-        json_path: (r.json_path ?? "").trim(),
-        ab: (r.ab ?? "").trim(),
-        ch: (r.ch ?? "").trim(),
-      }));
-      setStatus("csvStatus", `已載入 ${csvRows.length} 列。`, "");
-    },
-    error: (err)=> setStatus("csvStatus", "CSV 解析錯誤：" + err.message, "err")
+document.getElementById("csvFile").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  Papa.parse(f,{header:true,skipEmptyLines:"greedy",encoding:"utf-8",
+    complete:(res)=>{csvRows=res.data.map(r=>({json_path:(r.json_path||"").trim(),ab:(r.ab||"").trim(),ch:(r.ch||"").trim()}));
+      setStatus("csvStatus",`已載入 ${csvRows.length} 列。`,"");},
+    error:(err)=>setStatus("csvStatus","CSV 解析錯誤："+err.message,"err")
   });
 });
 
-function parsePath(p){ return p.replace(/\]/g,'').split(/[.\[]/g).filter(Boolean); }
-
-function getByPath(root, path){
-  const segs = parsePath(path);
-  let cur = root;
-  for(const s of segs){
-    if(cur == null || !(s in cur)) return undefined;
-    cur = cur[s];
-  }
-  return cur;
-}
+function parsePath(p){return p.replace(/\]/g,"").split(/[.\[]/g).filter(Boolean);}
+function getByPath(root,path){const segs=parsePath(path);let cur=root;for(const s of segs){if(cur==null||!(s in cur))return;cur=cur[s];}return cur;}
 
 function planChanges(){
-  plannedChanges = [];
-  if(!templateJSON){ setStatus("previewMsg", "請先上傳模板 JSON。", "warn"); return; }
-  if(!csvRows.length){ setStatus("previewMsg", "請先上傳更新 CSV。", "warn"); return; }
+  plannedChanges=[];if(!templateJSON){setStatus("previewMsg","請先上傳模板 JSON。","warn");return;}
+  if(!csvRows.length){setStatus("previewMsg","請先上傳 CSV。","warn");return;}
 
   for(const row of csvRows){
-    const path = row.json_path;
-    if(!path) continue;
-    const target = getByPath(templateJSON, path);
-    if(!target || typeof target !== "object"){
-      plannedChanges.push({path, field:"-", oldVal:"-", newVal:"-", status:"找不到目標"});
-      continue;
-    }
-    // ab：非空才檢查，且不同才算變更
-    if(row.ab){
-      const oldAB = target.ab ?? "";
-      if(row.ab !== oldAB){
-        plannedChanges.push({path, field:"ab", oldVal: oldAB, newVal: row.ab, status:"將更新"});
-      }
-    }
-    // ch：非空才檢查，且不同才算變更
-    if(row.ch){
-      const oldCH = target.ch ?? "";
-      if(row.ch !== oldCH){
-        plannedChanges.push({path, field:"ch", oldVal: oldCH, newVal: row.ch, status:"將更新"});
-      }
-    }
+    const path=row.json_path;if(!path)continue;
+    if(!(path.startsWith("speech")||path.startsWith("reading")))continue; // 僅 speech/reading
+    const target=getByPath(templateJSON,path);
+    if(!target||typeof target!=="object"){plannedChanges.push({path,field:"-",oldVal:"-",newVal:"-",status:"找不到目標"});continue;}
+    if(row.ab){const oldAB=target.ab??"";if(row.ab!==oldAB){plannedChanges.push({path,field:"ab",oldVal:oldAB,newVal:row.ab,status:"將更新"});}}
+    if(row.ch){const oldCH=target.ch??"";if(row.ch!==oldCH){plannedChanges.push({path,field:"ch",oldVal:oldCH,newVal:row.ch,status:"將更新"});}}
   }
-
   renderDiffTable(plannedChanges);
-  const count = plannedChanges.filter(r=>r.status==="將更新").length;
-  setStatus("previewMsg", `預覽完成：${count} 項將被更新。`, "");
+  setStatus("previewMsg",`預覽完成：${plannedChanges.filter(r=>r.status==="將更新").length} 項將被更新。`,"");
 }
 
 function renderDiffTable(rows){
-  const tbody = document.querySelector("#diffTable tbody");
-  tbody.innerHTML = "";
-  for(const r of rows){
-    const tr = document.createElement("tr");
-    function td(text, cls){
-      const el = document.createElement("td");
-      el.textContent = text;
-      if(cls) el.className = cls;
-      return el;
-    }
-    tr.appendChild(td(r.path));
-    tr.appendChild(td(r.field));
-    tr.appendChild(td(r.oldVal, r.status==="將更新" ? "changed" : ""));
-    tr.appendChild(td(r.newVal, r.status==="將更新" ? "changed" : ""));
-    tr.appendChild(td(r.status));
-    tbody.appendChild(tr);
-  }
+  const tb=document.querySelector("#diffTable tbody");tb.innerHTML="";
+  for(const r of rows){const tr=document.createElement("tr");
+    function td(t,c){const el=document.createElement("td");el.textContent=t;if(c)el.className=c;return el;}
+    tr.appendChild(td(r.path));tr.appendChild(td(r.field));tr.appendChild(td(r.oldVal,r.status==="將更新"?"changed":""));
+    tr.appendChild(td(r.newVal,r.status==="將更新"?"changed":""));tr.appendChild(td(r.status));tb.appendChild(tr);}
 }
 
 function applyChanges(){
-  if(!templateJSON){ setStatus("applyMsg", "請先上傳模板 JSON。", "warn"); return; }
-  if(!csvRows.length){ setStatus("applyMsg", "請先上傳更新 CSV。", "warn"); return; }
+  if(!templateJSON){setStatus("applyMsg","請先上傳模板 JSON。","warn");return;}
+  if(!csvRows.length){setStatus("applyMsg","請先上傳 CSV。","warn");return;}
+  if(!plannedChanges.length)planChanges();
 
-  // 若尚未預覽，先產生變更清單
-  if(!plannedChanges.length) planChanges();
-
-  const updated = JSON.parse(JSON.stringify(templateJSON));
-  let applied = 0;
-
+  const updated=JSON.parse(JSON.stringify(templateJSON));let applied=0;
   for(const change of plannedChanges){
-    if(change.status !== "將更新") continue;
-    const obj = getByPath(updated, change.path);
-    if(!obj || typeof obj !== "object") continue;
-
-    if(change.field === "ab" || change.field === "ch"){
-      // 僅在新值非空，且與現值不同時更新
-      const current = obj[change.field] ?? "";
-      if(change.newVal && change.newVal !== current){
-        obj[change.field] = change.newVal;
-        applied++;
-      }
-    }
+    if(change.status!=="將更新")continue;
+    const obj=getByPath(updated,change.path);if(!obj||typeof obj!=="object")continue;
+    if(change.field==="ab"||change.field==="ch"){if(change.newVal&&(change.newVal!==(obj[change.field]??""))){obj[change.field]=change.newVal;applied++;}}
   }
-
-  updatedJSON = updated;
-  setStatus("applyMsg", `已套用 ${applied} 項更新。`, "");
-  document.getElementById("resultPreview").textContent = JSON.stringify(updatedJSON, null, 2);
+  updatedJSON=updated;
+  setStatus("applyMsg",`已套用 ${applied} 項更新。`,"");
+  document.getElementById("resultPreview").textContent=JSON.stringify(updatedJSON,null,2);
 }
 
 function downloadUpdated(){
-  if(!updatedJSON){ setStatus("applyMsg", "尚未套用更新或無結果可下載。", "warn"); return; }
-  const blob = new Blob([JSON.stringify(updatedJSON, null, 2)], {type:"application/json;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "updated.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
+  if(!updatedJSON){setStatus("applyMsg","尚未套用更新或無結果可下載。","warn");return;}
+  const blob=new Blob([JSON.stringify(updatedJSON,null,2)],{type:"application/json;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="updated.json";a.click();URL.revokeObjectURL(a.href);
 }
 
-document.getElementById("previewBtn").addEventListener("click", planChanges);
-document.getElementById("applyBtn").addEventListener("click", applyChanges);
-document.getElementById("downloadBtn").addEventListener("click", downloadUpdated);
+document.getElementById("previewBtn").addEventListener("click",planChanges);
+document.getElementById("applyBtn").addEventListener("click",applyChanges);
+document.getElementById("downloadBtn").addEventListener("click",downloadUpdated);
 </script>
 </body>
 </html>
