@@ -608,6 +608,12 @@
           const [prize, setPrize] = useState(null);
           const [errorMsg, setErrorMsg] = useState("");
 
+          const demoPrizes = [
+            { name: "特獎：藍芽喇叭", count: 1, type: "big" },
+            { name: "實用獎：衛生紙", count: 50, type: "small" },
+            { name: "參加獎：糖果一顆", count: 999, type: "small" },
+          ];
+
           // --- Password Logic ---
           const handleKeypad = (num) => {
             if (inputCode.length < 4) {
@@ -632,14 +638,44 @@
             }
           };
 
+          // --- Lottery Logic (修復完整連線功能) ---
           const drawPrize = async () => {
-             // ... logic same as before, simplified for brevity in this view
-             if (state === 'drawing') return;
-             setState('drawing');
-             setTimeout(() => {
-                 setPrize({ name: "虛擬獎品：部落勇士勳章", type: "big" });
-                 setState('result');
-             }, 1500);
+            if (state === 'drawing') return;
+            setState('drawing');
+            setErrorMsg("");
+            try {
+              if (GAS_API_URL) {
+                const timestamp = new Date().getTime();
+                const response = await fetch(`${GAS_API_URL}?action=draw&t=${timestamp}`, {
+                  method: "GET",
+                  mode: 'cors',
+                  credentials: 'omit',
+                  redirect: 'follow',
+                  headers: { "Content-Type": "text/plain;charset=utf-8" },
+                });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+                if (data.error === "No prizes left!") {
+                   setPrize(data.prize || { name: "銘謝惠顧", type: "none" });
+                   setState('result');
+                   return; 
+                }
+                if (data.error) throw new Error(data.error);
+                setPrize(data.prize);
+              } else {
+                // 如果沒有設定 API URL，使用模擬抽獎
+                await new Promise(r => setTimeout(r, 2000));
+                setPrize(demoPrizes[Math.floor(Math.random() * demoPrizes.length)]);
+              }
+              setState('result');
+            } catch (err) {
+              console.error(err);
+              setErrorMsg(err.message);
+              // 連線失敗時切換到備用抽獎
+              const randomPrize = demoPrizes[Math.floor(Math.random() * demoPrizes.length)];
+              setPrize(randomPrize);
+              setState('result');
+            }
           };
 
           const reset = () => { 
