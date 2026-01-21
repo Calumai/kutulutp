@@ -11,7 +11,7 @@
     <!-- 載入 Babel (讓瀏覽器可以看懂 React JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 補強 3D 翻轉效果的 CSS -->
+    <!-- 補強 3D 翻轉效果的 CSS (Zone A 已移除翻轉，但保留給其他可能的擴充) -->
     <style>
         .perspective-1000 {
             perspective: 1000px;
@@ -71,7 +71,7 @@
         // ZONE COMPONENTS
         // ==========================================
 
-        // --- Zone A: 原住民文化知識通 (優化導覽版) ---
+        // --- Zone A: 原住民文化知識通 (優化導覽版 - 無翻轉/無Emoji) ---
         const TribeIntroZone = () => {
           // 完整 16 族資料庫 (新增 region 分類)
           const allTribes = [
@@ -95,7 +95,7 @@
 
           const [cards, setCards] = useState([]);
           const [idx, setIdx] = useState(0);
-          const [flipped, setFlipped] = useState(false);
+          // const [flipped, setFlipped] = useState(false); // 移除翻牌狀態
           const [isFinished, setIsFinished] = useState(false);
 
           // 初始化：隨機選 10 張
@@ -107,13 +107,13 @@
             const shuffled = [...allTribes].sort(() => 0.5 - Math.random());
             setCards(shuffled.slice(0, 10));
             setIdx(0);
-            setFlipped(false);
+            // setFlipped(false); // 移除翻牌重置
             setIsFinished(false);
           };
 
           const handleNext = () => {
             if (idx < cards.length - 1) {
-              setFlipped(false);
+              // setFlipped(false); // 移除翻牌重置
               setTimeout(() => setIdx(prev => prev + 1), 200);
             } else {
               setIsFinished(true);
@@ -122,7 +122,7 @@
 
           const handlePrev = () => {
             if (idx > 0) {
-              setFlipped(false);
+              // setFlipped(false); // 移除翻牌重置
               setTimeout(() => setIdx(prev => prev - 1), 200);
             }
           };
@@ -163,34 +163,28 @@
                     </div>
                   </div>
 
-                  {/* 中間：翻轉學習卡 */}
-                  <div className="flex flex-col items-center gap-6">
-                    <div className="w-80 h-[420px] perspective-1000 cursor-pointer" onClick={() => setFlipped(!flipped)}>
-                      <div className={`relative w-full h-full duration-500 transform-style-3d transition-all ${flipped ? 'rotate-y-180' : ''}`}>
-                        
-                        {/* 正面 */}
-                        <div className={`absolute w-full h-full ${cards[idx].color} rounded-3xl shadow-xl border-4 border-white p-8 flex flex-col items-center justify-center backface-hidden text-white`}>
-                          <div className="text-9xl mb-8 drop-shadow-md">{cards[idx].icon}</div>
-                          <h2 className="text-4xl font-black mb-4 text-center">{cards[idx].title}</h2>
-                          <div className="bg-white/20 px-4 py-2 rounded-full text-lg font-bold text-center">
+                  {/* 中間：靜態學習卡 (修正為不翻轉、無Emoji) */}
+                  <div className="flex flex-col items-center gap-6 w-full max-w-md">
+                    <div className="w-full bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-stone-200">
+                      
+                      {/* 上方標題區塊 (取代原有的Emoji封面) */}
+                      <div className={`${cards[idx].color} p-8 text-center text-white relative`}>
+                         <h2 className="text-4xl font-black mb-3">{cards[idx].title}</h2>
+                         <div className="bg-white/20 backdrop-blur-sm px-4 py-1 rounded-full inline-block text-lg font-bold border border-white/30">
                             {cards[idx].subtitle}
-                          </div>
-                          <p className="absolute bottom-8 text-white/60 font-bold animate-pulse flex items-center gap-2">
-                            <RefreshCw size={16}/> 點擊翻面看介紹
-                          </p>
-                        </div>
+                         </div>
+                      </div>
 
-                        {/* 背面 */}
-                        <div className="absolute w-full h-full bg-white rounded-3xl shadow-xl border-8 border-stone-300 p-8 flex flex-col items-center justify-center backface-hidden rotate-y-180 text-center">
-                          <h3 className="text-2xl font-black text-stone-800 mb-6 border-b-2 border-stone-100 pb-2 w-full">
-                            文化小知識
-                          </h3>
-                          <div className="text-xl text-stone-600 font-bold leading-loose">
-                            {cards[idx].content}
-                          </div>
-                          <div className="mt-auto text-stone-400 text-sm font-bold bg-stone-100 px-4 py-2 rounded-lg w-full">
-                            *趕快記下來，等一下會考喔！
-                          </div>
+                      {/* 下方內容區塊 */}
+                      <div className="p-8 flex flex-col items-center text-center">
+                        <h3 className="text-xl font-black text-stone-800 mb-4 border-b-2 border-stone-100 pb-2 w-full">
+                          文化小知識
+                        </h3>
+                        <p className="text-xl text-stone-600 font-bold leading-loose mb-6">
+                          {cards[idx].content}
+                        </p>
+                        <div className="mt-auto text-stone-400 text-sm font-bold bg-stone-100 px-4 py-2 rounded-lg w-full">
+                          *趕快記下來，等一下會考喔！
                         </div>
                       </div>
                     </div>
