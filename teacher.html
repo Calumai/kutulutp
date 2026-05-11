@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>115年臺北市中高級線上族語家教老師 - 截圖管理系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            .print-section {
+                display: block !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+            }
+            img {
+                max-width: 500px !important;
+                height: auto !important;
+            }
+            input.print-clean {
+                border: none !important;
+                padding: 0 !important;
+                background: transparent !important;
+                outline: none !important;
+            }
+        }
+        .file-drop-zone {
+            border: 2px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        .file-drop-zone.dragover {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans">
+
+    <div class="max-w-6xl mx-auto py-10 px-4 no-print">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl font-bold text-slate-800 mb-2">115年臺北市中高級線上族語家教老師</h1>
+            <p class="text-slate-500">圖片批次上傳、自動分類與個別助教設定</p>
+        </header>
+
+        <!-- 設定區域 -->
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-8 border border-slate-200">
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-slate-700 mb-1">月份標題 (所有報表通用)</label>
+                <input type="text" id="monthTitle" value="3月份截圖" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+
+            <!-- 檔案上傳區 -->
+            <div id="dropZone" class="file-drop-zone bg-slate-50 rounded-xl p-10 text-center cursor-pointer">
+                <i data-lucide="upload-cloud" class="mx-auto mb-4 text-slate-400 w-12 h-12"></i>
+                <p class="text-slate-600 mb-2 font-medium">點擊或拖拽大量圖片至此處</p>
+                <p class="text-xs text-slate-400">系統將自動根據檔名前綴（如：王老師-日期.jpg）進行分類</p>
+                <input type="file" id="imageInput" multiple accept="image/*" class="hidden">
+            </div>
+            
+            <div id="statusMessage" class="mt-4 text-sm text-center hidden font-medium"></div>
+        </div>
+
+        <!-- 操作按鈕 -->
+        <div class="flex justify-center gap-4 mb-10">
+            <button onclick="processImages()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium transition flex items-center gap-2 shadow-lg shadow-blue-200">
+                <i data-lucide="refresh-cw" class="w-5 h-5"></i> 開始分類圖片並填寫助教
+            </button>
+        </div>
+    </div>
+
+    <!-- 結果顯示區域 -->
+    <div id="outputArea" class="max-w-6xl mx-auto px-4 pb-20">
+        <!-- 各老師的區塊會動態生成於此 -->
+    </div>
+
+    <script>
+        // 初始化圖示
+        lucide.createIcons();
+
+        const dropZone = document.getElementById('dropZone');
+        const imageInput = document.getElementById('imageInput');
+        const outputArea = document.getElementById('outputArea');
+        const statusMessage = document.getElementById('statusMessage');
+
+        dropZone.addEventListener('click', () => imageInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            imageInput.files = e.dataTransfer.files;
+            showStatus(`已載入 ${e.dataTransfer.files.length} 個檔案，請點擊下方按鈕開始分類`);
+        });
+
+        imageInput.addEventListener('change', () => {
+            showStatus(`已載入 ${imageInput.files.length} 個檔案，請點擊下方按鈕開始分類`);
+        });
+
+        function showStatus(msg) {
+            statusMessage.textContent = msg;
+            statusMessage.classList.remove('hidden');
+            statusMessage.classList.add('text-blue-600');
+        }
+
+        async function processImages() {
+            const files = imageInput.files;
+            if (files.length === 0) {
+                alert("請先選擇圖片檔案！");
+                return;
+            }
+
+            const monthTitle = document.getElementById('monthTitle').value;
+            const groups = {};
+
+            // 1. 分類圖片
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                let teacherName = "未分類";
+                const match = file.name.match(/^([^-^_]+)/);
+                if (match) {
+                    teacherName = match[1].trim();
+                }
+
+                if (!groups[teacherName]) {
+                    groups[teacherName] = [];
+                }
+                groups[teacherName].push(file);
+            }
+
+            // 2. 渲染介面
+            outputArea.innerHTML = "";
+            const sortedTeachers = Object.keys(groups).sort();
+
+            for (const teacher of sortedTeachers) {
+                const teacherSection = document.createElement('div');
+                teacherSection.className = "bg-white rounded-xl shadow-md border border-slate-200 mb-16 overflow-hidden teacher-block";
+                teacherSection.id = `section-${teacher}`;
+
+                const images = groups[teacher];
+                
+                const headerActions = `
+                    <div class="no-print bg-slate-800 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+                        <div class="flex items-center gap-4">
+                            <span class="font-bold text-lg">${teacher} 老師</span>
+                            <div class="h-6 w-px bg-slate-600"></div>
+                            <label class="text-sm text-slate-300">本區助教：</label>
+                            <input type="text" 
+                                   placeholder="請輸入助教姓名" 
+                                   oninput="updateTAName('${teacher}', this.value)" 
+                                   class="bg-slate-700 border border-slate-600 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-white placeholder:text-slate-500">
+                        </div>
+                        <button onclick="printSpecificTeacher('${teacher}')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition shadow-md">
+                            <i data-lucide="printer" class="w-4 h-4"></i> 匯出 ${teacher} 老師報表 (PDF)
+                        </button>
+                    </div>
+                `;
+
+                let tableRows = "";
+                for (let j = 0; j < images.length; j++) {
+                    const imgUrl = URL.createObjectURL(images[j]);
+                    tableRows += `
+                        <tr class="border-b border-slate-200">
+                            <td class="p-4 text-center text-slate-600 font-medium">${j + 1}</td>
+                            <td class="p-4 text-slate-500 text-xs break-all w-32">${images[j].name}</td>
+                            <td class="p-4">
+                                <img src="${imgUrl}" class="rounded shadow-sm mx-auto border border-slate-100" style="width: 540px; height: auto;" alt="screenshot">
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                teacherSection.innerHTML = `
+                    ${headerActions}
+                    <div class="print-section p-10 bg-white">
+                        <h2 class="text-2xl font-bold text-center mb-8 text-black">115年臺北市中高級線上族語家教老師 - ${monthTitle}</h2>
+                        
+                        <div class="flex justify-between items-end mb-6 border-b-2 border-black pb-2">
+                            <div class="text-xl"><strong>授課老師：</strong><span class="border-b border-black px-4">${teacher}</span></div>
+                            <div class="text-xl"><strong>助教：</strong><span id="display-ta-${teacher}" class="border-b border-black px-8 min-w-[100px] inline-block"></span></div>
+                        </div>
+
+                        <table class="w-full border-collapse border-2 border-black">
+                            <thead>
+                                <tr class="bg-slate-100 print:bg-transparent">
+                                    <th class="border-2 border-black p-2 w-16 text-center text-lg">堂序</th>
+                                    <th class="border-2 border-black p-2 text-left w-40 text-lg">日期/備註</th>
+                                    <th class="border-2 border-black p-2 text-center text-lg">授課截圖</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                        
+                        <div class="mt-8 text-right text-sm text-slate-400 no-print">
+                            * 此報表僅顯示 ${teacher} 老師的課程紀錄
+                        </div>
+                    </div>
+                `;
+                outputArea.appendChild(teacherSection);
+            }
+
+            lucide.createIcons();
+            window.scrollTo({ top: outputArea.offsetTop - 20, behavior: 'smooth' });
+        }
+
+        function updateTAName(teacher, name) {
+            const displaySpan = document.getElementById(`display-ta-${teacher}`);
+            if (displaySpan) {
+                displaySpan.textContent = name;
+            }
+        }
+
+        function printSpecificTeacher(teacherName) {
+            const allBlocks = document.querySelectorAll('.teacher-block');
+            
+            allBlocks.forEach(block => {
+                if (block.id !== `section-${teacherName}`) {
+                    block.classList.add('no-print');
+                } else {
+                    block.classList.remove('no-print');
+                }
+            });
+
+            const monthTitle = document.getElementById('monthTitle').value;
+            const titles = document.querySelectorAll('.print-section h2');
+            titles.forEach(t => t.textContent = `115年臺北市中高級線上族語家教老師 - ${monthTitle}`);
+
+            window.print();
+
+            setTimeout(() => {
+                allBlocks.forEach(block => block.classList.remove('no-print'));
+            }, 500);
+        }
+    </script>
+</body>
+</html>
